@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "ST-Link (openocd)",
+            "name": "ST-Link Device 1",
             "cwd": "${workspaceRoot}",
             "type": "cortex-debug",
             "request": "launch",
@@ -17,7 +17,24 @@
                 "target/stm32g0x.cfg"
             ],
             "runToEntryPoint": "main",
-            "svdFile": "${workspaceRoot}/stm32g031.svd"
-        }
+            "svdFile": "${workspaceRoot}/stm32g031.svd",
+            "openOCDLaunchCommands": ["hla_serial 066CFF3933354D5043165420"]
+        },
+        {
+            "name": "ST-Link Device 2",
+            "cwd": "${workspaceRoot}",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "device": "STM32G031K8Tx",
+            "executable": "${command:cmake.launchTargetPath}",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32g0x.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "svdFile": "${workspaceRoot}/stm32g031.svd",
+            "openOCDLaunchCommands": ["hla_serial 066CFF313541483043202339"]
+        },
     ]
 }
