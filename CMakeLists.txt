@@ -61,6 +61,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ./Core/Src/usart.c
     ./Core/Src/stm32g0xx_it.c
     ./Core/Src/stm32g0xx_hal_msp.c
+
+    ./Core/Src/communication.c
 )
 
 # Add include paths
