@@ -100,6 +100,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   uint8_t data[32] = "Hello World\r\n";
   HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart2, data, strlen((const char*)data));
+  status = HAL_TIM_Base_Start_IT(&htim2);
   (void)(status);
 
   /* USER CODE END 2 */
@@ -109,7 +110,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -163,6 +164,16 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+/*
+* Callback 200us -> 5kHz
+*/
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance==TIM2)
+  {
+    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+  }
+}
 
 /* USER CODE END 4 */
 
