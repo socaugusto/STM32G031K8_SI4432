@@ -101,7 +101,10 @@ int main(void)
   uint8_t data[32] = "Hello World\r\n";
   HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart2, data, strlen((const char*)data));
   status = HAL_TIM_Base_Start_IT(&htim2);
-  (void)(status);
+  if (status != HAL_OK)
+  {
+    Error_Handler();
+  }
 
   /* USER CODE END 2 */
 
@@ -171,7 +174,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance==TIM2)
   {
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+    //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
   }
 }
 
