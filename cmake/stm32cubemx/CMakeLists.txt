@@ -21,15 +21,6 @@ target_include_directories(stm32cubemx INTERFACE
 )
 
 target_sources(stm32cubemx INTERFACE
-    ../../Core/Src/main.c
-    ../../Core/Src/gpio.c
-    ../../Core/Src/dma.c
-    ../../Core/Src/rtc.c
-    ../../Core/Src/spi.c
-    ../../Core/Src/tim.c
-    ../../Core/Src/usart.c
-    ../../Core/Src/stm32g0xx_it.c
-    ../../Core/Src/stm32g0xx_hal_msp.c
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rtc.c
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rtc_ex.c
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.c
@@ -51,10 +42,6 @@ target_sources(stm32cubemx INTERFACE
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.c
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.c
     ../../Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.c
-    ../../Core/Src/system_stm32g0xx.c
-    ../../Core/Src/sysmem.c
-    ../../Core/Src/syscalls.c
-    ../../startup_stm32g031xx.s
 )
 
 target_link_directories(stm32cubemx INTERFACE
