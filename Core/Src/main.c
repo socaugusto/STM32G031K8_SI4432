@@ -27,7 +27,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stm32g0xx_hal_uart.h"
 #include <string.h>
 
 /* USER CODE END Includes */
@@ -110,7 +109,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

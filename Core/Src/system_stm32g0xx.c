@@ -274,7 +274,7 @@ void SystemCoreClockUpdate(void)
 
       SystemCoreClock = pllvco/pllr;
       break;
-      
+
     case 0x00000000U:                   /* HSI used as system clock */
     default:                            /* HSI used as system clock */
       hsidiv = (1UL << ((READ_BIT(RCC->CR, RCC_CR_HSIDIV))>> RCC_CR_HSIDIV_Pos));
