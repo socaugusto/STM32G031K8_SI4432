@@ -4,7 +4,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "stdint.h"
 
+uint8_t comm_init(void);
 
 
 #ifdef __cplusplus

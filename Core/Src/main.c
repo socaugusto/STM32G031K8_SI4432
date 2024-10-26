@@ -27,6 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "communication.h"
 #include <string.h>
 
 /* USER CODE END Includes */
@@ -98,9 +99,12 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  comm_init();
+
   uint8_t data[32] = "Hello World\r\n";
   HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart2, data, strlen((const char*)data));
   status = HAL_TIM_Base_Start_IT(&htim2);
+
   if (status != HAL_OK)
   {
     Error_Handler();
