@@ -124,23 +124,23 @@ uint8_t comm_init(void)
     hal_spi_writeRegister(0x75, 0x75); // write 0x75 to the Frequency Band Select register
     hal_spi_writeRegister(0x76, 0xBB); // write 0xBB to the Nominal Carrier Frequency1 register
     hal_spi_writeRegister(0x77, 0x80); // write 0x80 to the Nominal Carrier Frequency0 register
-    // set the desired TX data rate (9.6kbps)
-    hal_spi_writeRegister(0x6E, 0x4E); // write 0x4E to the TXDataRate 1 register
-    hal_spi_writeRegister(0x6F, 0xA5); // write 0xA5 to the TXDataRate 0 register
-    hal_spi_writeRegister(0x70, 0x2C); // write 0x2C to the Modulation Mode Control 1 register
+    // set the desired TX data rate (128kbps)
+    hal_spi_writeRegister(0x6E, 0x20); // write 0x20 to the TXDataRate 1 register
+    hal_spi_writeRegister(0x6F, 0xC5); // write 0xC5 to the TXDataRate 0 register
+    hal_spi_writeRegister(0x70, 0x04); // write 0x04 to the Modulation Mode Control 1 register
 
     // set the Tx deviation register (+-45kHz)
     hal_spi_writeRegister(0x72, 0x48);
 
-    /*set the modem parameters according to the exel calculator(parameters: 9.6 kbps, deviation: 45 kHz, channel filter
+    /*set the modem parameters according to the exel calculator(parameters: 128 kbps, deviation: 45 kHz, channel filter
      * BW: 102.2 kHz*/
-    hal_spi_writeRegister(0x1C, 0x1E); // write 0x1E to the IF Filter Bandwidth register
-    hal_spi_writeRegister(0x20, 0xD0); // write 0xD0 to the Clock Recovery Oversampling Ratio register
-    hal_spi_writeRegister(0x21, 0x00); // write 0x00 to the Clock Recovery Offset 2 register
-    hal_spi_writeRegister(0x22, 0x9D); // write 0x9D to the Clock Recovery Offset 1 register
-    hal_spi_writeRegister(0x23, 0x49); // write 0x49 to the Clock Recovery Offset 0 register
-    hal_spi_writeRegister(0x24, 0x00); // write 0x00 to the Clock Recovery Timing Loop Gain 1 register
-    hal_spi_writeRegister(0x25, 0x24); // write 0x24 to the Clock Recovery Timing Loop Gain 0 register
+    hal_spi_writeRegister(0x1C, 0x81); // write 0x1E to the IF Filter Bandwidth register
+    hal_spi_writeRegister(0x20, 0x5E); // write 0xD0 to the Clock Recovery Oversampling Ratio register
+    hal_spi_writeRegister(0x21, 0x01); // write 0x00 to the Clock Recovery Offset 2 register
+    hal_spi_writeRegister(0x22, 0x5D); // write 0x9D to the Clock Recovery Offset 1 register
+    hal_spi_writeRegister(0x23, 0x86); // write 0x49 to the Clock Recovery Offset 0 register
+    hal_spi_writeRegister(0x24, 0x03); // write 0x00 to the Clock Recovery Timing Loop Gain 1 register
+    hal_spi_writeRegister(0x25, 0xE2); // write 0x24 to the Clock Recovery Timing Loop Gain 0 register
     hal_spi_writeRegister(0x1D, 0x40); // write 0x40 to the AFC Loop Gearshift Override register
     hal_spi_writeRegister(0x1E, 0x0A); // write 0x0A to the AFC Timing Control register
     hal_spi_writeRegister(0x2A, 0x20); // write 0x20 to the AFC Limiter register
@@ -167,8 +167,8 @@ uint8_t comm_init(void)
     hal_spi_writeRegister(0x71, 0x63); // write 0x63 to the Modulation Mode Control 2 register
 
     /*set the GPIO's according to the RF switch */
-    hal_spi_writeRegister(0x0C, 0x12); // write 0x12 to the GPIO1 Configuration(set the TX state)
-    hal_spi_writeRegister(0x0D, 0x15); // write 0x15 to the GPIO2 Configuration(set the RX state)
+    hal_spi_writeRegister(0x0B, 0x12); // write 0x12 to the GPIO1 Configuration(set the TX state)
+    hal_spi_writeRegister(0x0C, 0x15); // write 0x15 to the GPIO2 Configuration(set the RX state)
 
     /*set the non-default Si443x registers*/
     // set AGC Override1 Register
@@ -195,7 +195,7 @@ void comm_run(void)
 
     if (hal_gpio_isButtonPressed())
     {
-        HAL_Delay(1);
+        HAL_Delay(25);
         while (hal_gpio_isButtonPressed())
             ;
         sprintf((char *)string, "Button pressed \r\n");
