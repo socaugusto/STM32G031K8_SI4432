@@ -9,6 +9,31 @@
 #define WRTIE_REGISTER_MASK 0x80
 #define READ_REGISTER_MASK 0x00
 
+enum DeviceState
+{
+    SI4432_IDLE,
+    SI4432_TRANSMIT,
+    SI4432_RECEIVE,
+} state;
+
+typedef enum
+{
+    SI4432_RECEIVE_NONE,
+    SI4432_RECEIVE_ACKNOWLEDGE,
+    SI4432_RECEIVE_BUTTON,
+    SI4432_ERROR_UNEXPECTED_LONG_PACKET,
+    SI4432_ERROR_CRC,
+
+} ReceiveResult_t;
+
+uint32_t txPacketscount = 0;
+uint32_t rxPacketscount = 0;
+uint32_t rxPacketAck = 0;
+uint32_t rxPacketButton = 0;
+uint32_t rxPacketUnexpected = 0;
+uint32_t rxPacketTooBig = 0;
+uint32_t rxPacketCRCError = 0;
+
 static inline void hal_spi_startTransmissionSignal(void)
 {
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
@@ -100,8 +125,6 @@ static void si4432_softwareReset(void)
 
 static void si4432_enableReceiver(void)
 {
-    /*enable receiver chain*/
-    hal_spi_writeRegister(0x07, 0x05); // write 0x05 to the Operating Function Control 1 register
     // Enable two interrupts:
     //  a) one which shows that a valid packet received: 'ipkval'
     //  b) second shows if the packet received with incorrect CRC: 'icrcerror'
@@ -110,6 +133,9 @@ static void si4432_enableReceiver(void)
     // read interrupt status registers to release all pending interrupts
     hal_spi_readRegister(0x03); // read the Interrupt Status1 register
     hal_spi_readRegister(0x04); // read the Interrupt Status2 register
+    /*enable receiver chain*/
+    hal_spi_writeRegister(0x07, 0x05); // write 0x05 to the Operating Function Control 1 register
+    state = SI4432_RECEIVE;
 }
 
 uint8_t comm_init(void)
@@ -183,207 +209,193 @@ uint8_t comm_init(void)
     return 0;
 }
 
-void comm_run(void)
+void comm_sendPacket(void)
 {
-    volatile uint8_t itStatus1;
-    volatile uint8_t itStatus2;
-    uint8_t length;
-    uint8_t temp8;
-    uint8_t payload[10];
-    uint8_t string[32];
-    uint8_t rssi = 0;
+    // turn on the LED to show the packet transmission
+    hal_gpio_setLed(true);
+    // disable the receiver chain (but keep the XTAL running to have shorter TX on time!)
+    hal_spi_writeRegister(0x07, 0x01); // write 0x01 to the Operating Function Control 1 register
+    /*SET THE CONTENT OF THE PACKET*/
+    // set the length of the payload to 8bytes
+    hal_spi_writeRegister(0x3E, 8); // write 8 to the Transmit Packet Length register
+    // fill the payload into the transmit FIFO
+    hal_spi_writeRegister(0x7F, 0x42); // write 0x42 ('B') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x55); // write 0x55 ('U') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x54); // write 0x54 ('T') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x54); // write 0x54 ('T') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x4F); // write 0x4F ('O') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x4E); // write 0x4E ('N') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x31); // write 0x31 ('1') to the FIFO Access register
+    hal_spi_writeRegister(0x7F, 0x0D); // write 0x0D (CR) to the FIFO Access register
+    // Disable all other interrupts and enable the packet sent interrupt only.
+    // This will be used for indicating the successfull packet transmission for the MCU
+    hal_spi_writeRegister(0x05, 0x04); // write 0x04 to the Interrupt Enable 1 register
+    hal_spi_writeRegister(0x06, 0x00); // write 0x03 to the Interrupt Enable 2 register
+    // Read interrupt status regsiters. It clear all pending interrupts and the nIRQ pin goes back to high.
+    hal_spi_readRegister(0x03); // read the Interrupt Status1 register
+    hal_spi_readRegister(0x04); // read the Interrupt Status2 register
+    /*enable transmitter*/
+    // The radio forms the packet and send it automatically.
+    hal_spi_writeRegister(0x07, 0x09); // write 0x09 to the Operating Function Control 1 register
+    state = SI4432_TRANSMIT;
+    /*wait for the packet sent interrupt*/
+    // The MCU just needs to wait for the 'ipksent' interrupt.
+    ++txPacketscount;
+}
 
-    if (hal_gpio_isButtonPressed())
+static ReceiveResult_t comm_handleReceived(void)
+{
+    ReceiveResult_t result = SI4432_RECEIVE_NONE;
+
+    // disable the receiver chain
+    hal_spi_writeRegister(0x07, 0x01); // write 0x01 to the Operating Function Control 1 register
+
+    // read interrupt status registers
+    volatile uint8_t itStatus1 = hal_spi_readRegister(0x03);
+    volatile uint8_t itStatus2 = hal_spi_readRegister(0x04);
+
+    if (itStatus2)
     {
-        HAL_Delay(25);
-        while (hal_gpio_isButtonPressed())
-            ;
-        sprintf((char *)string, "Button pressed \r\n");
-        HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
-        // disable the receiver chain (but keep the XTAL running to have shorter TX on time!)
-        hal_spi_writeRegister(0x07, 0x01); // write 0x01 to the Operating Function Control 1 register
-        // turn on the LED to show the packet transmission
-        hal_gpio_setLed(true);
-        /*SET THE CONTENT OF THE PACKET*/
-        // set the length of the payload to 8bytes
-        hal_spi_writeRegister(0x3E, 8); // write 8 to the Transmit Packet Length register
-        // fill the payload into the transmit FIFO
-        hal_spi_writeRegister(0x7F, 0x42); // write 0x42 ('B') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x55); // write 0x55 ('U') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x54); // write 0x54 ('T') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x54); // write 0x54 ('T') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x4F); // write 0x4F ('O') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x4E); // write 0x4E ('N') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x31); // write 0x31 ('1') to the FIFO Access register
-        hal_spi_writeRegister(0x7F, 0x0D); // write 0x0D (CR) to the FIFO Access register
-
-        // Disable all other interrupts and enable the packet sent interrupt only.
-        // This will be used for indicating the successfull packet transmission for the MCU
-        hal_spi_writeRegister(0x05, 0x04); // write 0x04 to the Interrupt Enable 1 register
-        hal_spi_writeRegister(0x06, 0x00); // write 0x03 to the Interrupt Enable 2 register
-        // Read interrupt status regsiters. It clear all pending interrupts and the nIRQ pin goes back to high.
-        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-        /*enable transmitter*/
-        // The radio forms the packet and send it automatically.
-        hal_spi_writeRegister(0x07, 0x09); // write 0x09 to the Operating Function Control 1 register
-
-        /*wait for the packet sent interrupt*/
-        // The MCU just needs to wait for the 'ipksent' interrupt.
-        while (hal_gpio_isIRQ())
-            ;
-        // read interrupt status registers to release the interrupt flags
-        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-        // wait a bit for showing the LED a bit longer
-        HAL_Delay(2);
-        // turn off the LED
-        hal_gpio_setLed(false);
-
-        // after packet transmission set the interrupt enable bits according receiving mode
-        // Enable two interrupts:
-        //  a) one which shows that a valid packet received: 'ipkval'
-        //  b) second shows if the packet received with incorrect CRC: 'icrcerror'
-        hal_spi_writeRegister(0x05, 0x03); // write 0x03 to the Interrupt Enable 1 register
-        hal_spi_writeRegister(0x06, 0x00); // write 0x00 to the Interrupt Enable 2 register
-        // read interrupt status registers to release all pending interrupts
-        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-        /*enable receiver chain again*/
-        hal_spi_writeRegister(0x07, 0x05);
-        sprintf((char *)string, "Data Sent... \r\n");
-        HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
     }
 
-    // wait for the interrupt event
-    // If it occurs, then it means a packet received or CRC error happened
-    if (hal_gpio_isIRQ() == false)
+    /*CRC Error interrupt occured*/
+    if ((itStatus1 & 0x01) == 0x01)
     {
-        rssi = hal_spi_readRegister(0x26);
-        sprintf((char *)string, "Receiver: %d \r\n", rssi);
-        HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
-        // disable the receiver chain
-        hal_spi_writeRegister(0x07, 0x01); // write 0x01 to the Operating Function Control 1 register
-        // read interrupt status registers
-        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-        /*CRC Error interrupt occured*/
-        if ((itStatus1 & 0x01) == 0x01)
-        {
-            // reset the RX FIFO
-            hal_spi_writeRegister(0x08, 0x02); // write 0x02 to the Operating Function Control 2 register
-            hal_spi_writeRegister(0x08, 0x00); // write 0x00 to the Operating Function Control 2 register
-            // blink LED to show the error
-            for (uint32_t i = 0; i < 20; ++i)
-            {
-                hal_gpio_setLed(true);
-                HAL_Delay(50);
-                hal_gpio_setLed(false);
-            }
-            sprintf((char *)string, "CRC Error \r\n");
-            HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
-        }
-
-        if (itStatus2)
-        {
-        }
-
-        /*packet received interrupt occured*/
-        if ((itStatus1 & 0x02) == 0x02)
-        {
-            // Read the length of the received payload
-            length = hal_spi_readRegister(0x4B); // read the Received Packet Length register
-            // check whether the received payload is not longer than the allocated buffer in the MCU
-            if (length < 11)
-            {
-                // Get the reeived payload from the RX FIFO
-                for (temp8 = 0; temp8 < length; temp8++)
-                {
-                    payload[temp8] = hal_spi_readRegister(0x7F); // read the FIFO Access register
-                }
-
-                // check whether the acknowledgement packet received
-                if (length == 4)
-                {
-                    if (memcmp(&payload[0], "ACK", 3) == 0)
-                    {
-                        sprintf((char *)string, "Acknowledgment successfull \r\n");
-                        HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
-                    }
-                }
-
-                // check whether an expected packet received, this should be acknowledged
-                if (length == 8)
-                {
-                    if (memcmp(&payload[0], "BUTTON1", 7) == 0)
-                    {
-                        sprintf((char *)string, "Packet received....Ack... \r\n");
-                        HAL_UART_Transmit(&huart2, string, strlen((const char *)string), 5);
-
-                        /*send back an acknowledgement*/
-                        // turn on LED1 to show packet transmission
-                        hal_gpio_setLed(true);
-                        // The Tx deviation register has to set according to the deviation before every transmission
-                        // (+-45kHz)
-                        hal_spi_writeRegister(0x72, 0x48); // write 0x48 to the Frequency Deviation register
-                        /*set packet content*/
-                        // set the length of the payload to 4bytes
-                        hal_spi_writeRegister(0x3E, 4); // write 4 to the Transmit Packet Length register
-                        // fill the payload into the transmit FIFO
-                        hal_spi_writeRegister(0x7F, 0x41); // write 0x41 ('A') to the FIFO Access register
-                        hal_spi_writeRegister(0x7F, 0x43); // write 0x43 ('C') to the FIFO Access register
-                        hal_spi_writeRegister(0x7F, 0x4B); // write 0x4B ('K') to the FIFO Access register
-                        hal_spi_writeRegister(0x7F, 0x0D); // write 0x0D (CR) to the FIFO Access register
-
-                        // Disable all other interrupts and enable the packet sent interrupt only.
-                        // This will be used for indicating the successfull packet transmission for the MCU
-                        hal_spi_writeRegister(0x05, 0x04); // write 0x04 to the Interrupt Enable 1 register
-                        hal_spi_writeRegister(0x06, 0x00); // write 0x00 to the Interrupt Enable 2 register
-                        // Read interrupt status regsiters. It clear all pending interrupts and the nIRQ pin goes back
-                        // to high.
-                        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-                        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-                        /*enable transmitter*/
-                        // The radio forms the packet and send it automatically.
-                        hal_spi_writeRegister(0x07, 0x09); // write 0x09 to the Operating Function Control 1 register
-
-                        /*wait for the packet sent interrupt*/
-                        // The MCU just needs to wait for the 'ipksent' interrupt.
-                        while (hal_gpio_isIRQ() == true)
-                            ;
-                        // read interrupt status registers to release the interrupt flags
-                        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-                        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-
-                        // wait a bit for showing the LED a bit longer
-                        HAL_Delay(250);
-                        // turn off the LED
-                        hal_gpio_setLed(false);
-
-                        // after packet transmission set the interrupt enable bits according receiving mode
-                        // Enable two interrupts:
-                        //  a) one which shows that a valid packet received: 'ipkval'
-                        //  b) second shows if the packet received with incorrect CRC: 'icrcerror'
-                        hal_spi_writeRegister(0x05, 0x03); // write 0x03 to the Interrupt Enable 1 register
-                        hal_spi_writeRegister(0x06, 0x00); // write 0x00 to the Interrupt Enable 2 register
-                        // read interrupt status registers to release all pending interrupts
-                        itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
-                        itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
-                        // set the Frequency Deviation register according to the AFC limiter
-                        hal_spi_writeRegister(0x72, 0x1F); // write 0x1F to the Frequency Deviation register
-                    }
-                }
-            }
-        }
         // reset the RX FIFO
         hal_spi_writeRegister(0x08, 0x02); // write 0x02 to the Operating Function Control 2 register
         hal_spi_writeRegister(0x08, 0x00); // write 0x00 to the Operating Function Control 2 register
-        // enable the receiver chain again
-        hal_spi_writeRegister(0x07, 0x05); // write 0x05 to the Operating Function Control 1 register
+        result = SI4432_ERROR_CRC;
     }
+    else if ((itStatus1 & 0x02) == 0x02) /*packet received interrupt occured*/
+    {
+        uint8_t length;
+        uint8_t temp8;
+        uint8_t payload[10];
+        // Read the length of the received payload
+        length = hal_spi_readRegister(0x4B); // read the Received Packet Length register
+        // check whether the received payload is not longer than the allocated buffer in the MCU
+        if (length < sizeof(payload))
+        {
+            // Get the reeived payload from the RX FIFO
+            for (temp8 = 0; temp8 < length; temp8++)
+            {
+                payload[temp8] = hal_spi_readRegister(0x7F); // read the FIFO Access register
+            }
+            hal_spi_writeRegister(0x08, 0x02); // write 0x02 to the Operating Function Control 2 register
+            hal_spi_writeRegister(0x08, 0x00); // write 0x00 to the Operating Function Control 2 register
+
+            // check whether the acknowledgement packet received
+            if (length == 4)
+            {
+                if (memcmp(&payload[0], "ACK", 3) == 0)
+                {
+                    result = SI4432_RECEIVE_ACKNOWLEDGE;
+                }
+            }
+            else if (length == 8) // check whether an expected packet received, this should be acknowledged
+            {
+                if (memcmp(&payload[0], "BUTTON1", 7) == 0)
+                {
+                    result = SI4432_RECEIVE_BUTTON;
+                    /*send back an acknowledgement*/
+                    // turn on LED1 to show packet transmission
+                    hal_gpio_setLed(true);
+                    /*set packet content*/
+                    // set the length of the payload to 4bytes
+                    hal_spi_writeRegister(0x3E, 4); // write 4 to the Transmit Packet Length register
+                    // fill the payload into the transmit FIFO
+                    hal_spi_writeRegister(0x7F, 0x41); // write 0x41 ('A') to the FIFO Access register
+                    hal_spi_writeRegister(0x7F, 0x43); // write 0x43 ('C') to the FIFO Access register
+                    hal_spi_writeRegister(0x7F, 0x4B); // write 0x4B ('K') to the FIFO Access register
+                    hal_spi_writeRegister(0x7F, 0x0D); // write 0x0D (CR) to the FIFO Access register
+
+                    // Disable all other interrupts and enable the packet sent interrupt only.
+                    // This will be used for indicating the successfull packet transmission for the MCU
+                    hal_spi_writeRegister(0x05, 0x04); // write 0x04 to the Interrupt Enable 1 register
+                    hal_spi_writeRegister(0x06, 0x00); // write 0x00 to the Interrupt Enable 2 register
+                    // Read interrupt status regsiters. It clear all pending interrupts and the nIRQ pin goes back
+                    // to high.
+                    itStatus1 = hal_spi_readRegister(0x03); // read the Interrupt Status1 register
+                    itStatus2 = hal_spi_readRegister(0x04); // read the Interrupt Status2 register
+
+                    /*enable transmitter*/
+                    // The radio forms the packet and send it automatically.
+                    hal_spi_writeRegister(0x07, 0x09); // write 0x09 to the Operating Function Control 1 register
+                    state = SI4432_TRANSMIT;
+                }
+            }
+        }
+        else
+        {
+            result = SI4432_ERROR_UNEXPECTED_LONG_PACKET;
+        }
+    }
+    return result;
+}
+
+void comm_irqCallback(void)
+{
+    ReceiveResult_t rxResult;
+    switch (state)
+    {
+    case SI4432_TRANSMIT:
+        si4432_enableReceiver();
+        hal_gpio_setLed(false);
+
+        break;
+    case SI4432_RECEIVE:
+        rxResult = comm_handleReceived();
+
+        switch (rxResult)
+        {
+        case SI4432_RECEIVE_NONE:
+            ++rxPacketUnexpected;
+            break;
+        case SI4432_ERROR_CRC:
+            ++rxPacketCRCError;
+            break;
+        case SI4432_ERROR_UNEXPECTED_LONG_PACKET:
+            ++rxPacketTooBig;
+            break;
+        case SI4432_RECEIVE_ACKNOWLEDGE:
+            ++rxPacketAck;
+            break;
+        case SI4432_RECEIVE_BUTTON:
+            ++rxPacketButton;
+            break;
+        }
+        ++rxPacketscount;
+
+        break;
+    case SI4432_IDLE:
+
+        break;
+    default:
+
+        break;
+    }
+}
+
+void comm_run(void)
+{
+    __disable_irq();
+    uint8_t string[1024];
+    uint32_t i = 0;
+    const char *limiter = "----------------------------------------\r\n";
+    memcpy(string, limiter, strlen(limiter));
+    i = strlen(limiter);
+    i += sprintf((char *)&string[i], "Tick: %ld\r\n", HAL_GetTick());
+    i += sprintf((char *)&string[i], "Tx packets: %ld\r\n", txPacketscount);
+    i += sprintf((char *)&string[i], "Rx packets: %ld\r\n", rxPacketscount);
+    i += sprintf((char *)&string[i], "Ack: %ld\r\n", rxPacketAck);
+    i += sprintf((char *)&string[i], "Button: %ld\r\n", rxPacketButton);
+    i += sprintf((char *)&string[i], "Unexpected: %ld\r\n", rxPacketUnexpected);
+    i += sprintf((char *)&string[i], "CRC error: %ld\r\n", rxPacketCRCError);
+    i += sprintf((char *)&string[i], "Too big: %ld\r\n", rxPacketTooBig);
+    memcpy(&string[i], limiter, strlen(limiter));
+    i += strlen(limiter);
+    ++i;
+    string[i] = '\0';
+    HAL_UART_Transmit_DMA(&huart2, string, i);
+    __enable_irq();
 }

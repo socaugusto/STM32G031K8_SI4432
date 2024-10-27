@@ -81,3 +81,13 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+
+add_custom_target(${CMAKE_PROJECT_NAME}_Flash_1
+    COMMAND openocd -f interface/stlink.cfg -f target/stm32g0x.cfg -c "hla_serial 066CFF3933354D5043165420" -c "program stmg031k8.elf verify reset exit"
+    DEPENDS ${CMAKE_PROJECT_NAME}
+)
+
+add_custom_target(${CMAKE_PROJECT_NAME}_Flash_2
+    COMMAND openocd -f interface/stlink.cfg -f target/stm32g0x.cfg -c "hla_serial 066CFF313541483043202339" -c "program stmg031k8.elf verify reset exit"
+    DEPENDS ${CMAKE_PROJECT_NAME}
+)
