@@ -7,6 +7,7 @@ extern "C" {
 #include "stdint.h"
 
 uint8_t comm_init(void);
+void comm_run(void);
 
 
 #ifdef __cplusplus

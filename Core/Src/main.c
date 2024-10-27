@@ -119,6 +119,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    comm_run();
   }
   /* USER CODE END 3 */
 }
